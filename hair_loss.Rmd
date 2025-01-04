@@ -1,0 +1,715 @@
+---
+title: "Hair Loss Causes"
+author: "Luis Felipe de Moraes"
+date: "2024-07-04"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+---
+
+<style>
+#TOC { 
+  color: #007681;
+  font-family: Helvetica Neue;
+  border-color: #005F86;
+}
+body {
+  background-color: #f5f5f5;
+  font-family: Adobe Garamond Pro;
+}
+#header {
+ color: #005F86;
+ background-color: #f5f5f5;
+ font-family: Helvetica Neue;
+ font-size: 20px;
+}
+h1 {
+ color: #007681;
+ background-color: #f5f5f5;
+ font-family: Helvetica Neue;
+ font-size: 20px;
+}
+h2 {
+ color: #279989;
+ background-color: #f5f5f5;
+ font-family: Helvetica Neue;
+ font-size: 20px;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+
+As we age, hair loss becomes one of the health concerns of many people. The fullness of hair not only affects appearance, but is also closely related to an individual's health.
+
+A survey brings together a variety of factors that may contribute to hair loss, including genetic factors, hormonal changes, medical conditions, medications, nutritional deficiencies, psychological stress, and more. Through data exploration and analysis, the potential correlation between these factors and hair loss can be deeply explored, thereby providing useful reference for the development of individual health management, medical intervention and related industries.
+
+### The data
+
+The survey provides the information you need in the hairfall.csv in the folder.
+
+Data contains information on persons in this survey. Each row represents one person.
+
+*"Id"* - A unique identifier for each person.
+
+*"Genetics"* - Whether the person has a family history of baldness.
+
+*"Hormonal Changes"* - Indicates whether the individual has experienced hormonal changes (Yes/No).
+
+*"Medical Conditions"* - Medical history that may lead to baldness; alopecia areata, thyroid problems, scalp infections, psoriasis, dermatitis, etc.
+
+*"Medications & Treatments"* - History of medications that may cause hair loss; chemotherapy, heart medications, antidepressants, steroids, etc.
+
+*"Nutritional Deficiencies"* - Lists nutritional deficiencies that may contribute to hair loss, such as iron deficiency, vitamin D deficiency, biotin
+deficiency, omega-3 fatty acid deficiency, etc.
+
+*"Stress"* - Indicates the stress level of the individual (Low/Moderate/High).
+
+*"Age"* - Represents the age of the individual.
+
+*"Poor Hair Care Habits"* - Indicates whether the individual practices poor hair care habits (Yes/No).
+
+*"Environmental Factors"* - Indicates whether the individual is exposed to environmental factors that may contribute to hair loss (Yes/No).
+
+*"Smoking"* - Indicates whether the individual smokes (Yes/No).
+
+*"Weight Loss"* - Indicates whether the individual has experienced significant weight loss (Yes/No).
+
+*"Hair Loss"* - Binary variable indicating the presence (1) or absence (0) of baldness in the individual.
+
+
+
+## Presenting Key Insights
+
+The main group of individuals suffering from hair loss, had these factors associated to them:
+
+-> They are Smokers;
+
+-> They declared not having Poor Hair Care Habits;
+
+-> They not in a Environment that can lead to Hair Loss;
+
+-> Some of them use Antibiotics and Antifungal Cream;
+
+-> Some of them had Seborrheic Dermatitis;
+
+-> Some suffer from Vitamin A, Selenium and Zinc Deficiency;
+
+-> They are in the age groups: less then 25, and 35 to 45 years old.
+
+Worth noting that the second group in size, also have the same Zinc Deficiency, also non smokers, and some have Seborrheic Dermatitis, but differences 
+were found:
+
+-> They are people in the 25 to 35 age group;
+
+-> They are under Hormonal Change;
+
+-> They are under moderate stress;
+
+-> Some made use of rogaine and steroids;
+
+-> They declared they have Poor Hair Care Habits;
+
+-> They declared not loosing weight;
+
+-> Some suffered from Psoriasis.
+
+
+We can see that some characteristics are strongly dependent on it's association with other factors. For example the "Poor Hair Care Habits" variable.
+
+Age group also seems affected by different factors.
+
+```{r head_main, include = FALSE}
+
+# Loading the necessary libraries and giving a first glance at the data
+
+library(tidyverse)
+library(tidymodels)
+library(cluster)
+library(reshape2)
+library(fpc)
+library(dendextend)
+library(patchwork)
+
+df <- read.csv("hairloss.csv")
+head(df)
+
+df_f <- df
+
+names(df_f) <- c("id","genetics","hormonal_change","medical_conditions",
+                 "medical_treatments","nutritional_deficiencies","stress",
+                 "age","poor_hair_care_habits","environmental_factors",
+                 "smoking","weight_loss","hair_loss")
+
+df_f$age_group <- case_when(df_f$age <= 25 ~ "<= 25 years",
+                            df_f$age <= 35 ~ "25 - 35 years",
+                            df_f$age <= 45 ~ "35 - 45 years",
+                            df_f$age > 45 ~ "> 45 years")
+
+df_f$age_group <- factor(df_f$age_group, levels = c("<= 25 years", "25 - 35 years", "35 - 45 years", "> 45 years"))
+
+df_f$hair_loss_desc <- ifelse(df_f$hair_loss == 0, "No", "Yes")
+
+```
+
+<br>
+
+## Exploratory Data Analysis
+
+<br>
+```{r echo=FALSE, fig.align = 'center', message = FALSE, warning = FALSE}
+# exploratory data analysis, trying to find some trends
+
+age_mean <- round(mean(df_f$age))
+
+
+df_f %>%
+  ggplot(aes(age, fill = hair_loss_desc, colour = hair_loss_desc)) +
+  geom_density(alpha = 0.3, linewidth = 1.1) +
+  theme_light() +
+  scale_fill_manual(values = c("purple4","steelblue2")) +
+  scale_colour_manual(values = c("purple4","steelblue2")) +
+  labs(title = "Hair Loss by Age",
+       x = "Hair Loss",
+       y = "Total") +
+  guides(colour = guide_legend(title="Hair Loss")) +
+  guides(fill = guide_legend(title="Hair Loss"))
+
+
+df_f %>%
+  group_by(age_group, hair_loss_desc) %>%
+  summarize(total = n()) %>%
+  mutate(prop = round(total / sum(total) * 100,2)) %>%
+  ggplot(aes(age_group, total, fill = hair_loss_desc)) +
+  geom_col(position = "dodge", alpha = .8) +
+  theme_light() +
+  scale_fill_manual(values = c("purple4","steelblue2")) +
+  geom_text(aes(label = str_c(as.character(prop), "%"), y = total + 4), position = position_dodge(0.9), size = 4) +
+  annotate("text", 1, 170, label = str_c("Mean Age: ",as.character(age_mean)," years")) +
+  labs(title = "Cases of Hair Loss by Age Group",
+       x = "Age Group",
+       y = "Total") +
+  guides(fill=guide_legend(title="Hair Loss"))
+
+df_f %>%
+  group_by(hair_loss_desc, genetics) %>%
+  summarize(total = n()) %>%
+  mutate(prop = round(total / sum(total) * 100,2)) %>%
+  ggplot(aes(fct_reorder(genetics, total, .desc = TRUE), total, fill = hair_loss_desc)) +
+  geom_col(position = "dodge", alpha = .8) +
+  theme_light() +
+  scale_fill_manual(values = c("purple4","steelblue2")) +
+  geom_text(aes(label = str_c(as.character(prop), "%"), y = total + 2), position = position_dodge(0.9), size = 4) +
+  theme(axis.text.x = element_text(angle = 45, size = 9)) +
+  labs(title = "Hormonal Change Summary by Genetics",
+       x = "Hormonal Change",
+       y = "Total") +
+  guides(fill=guide_legend(title="Hair Loss"))
+
+df_f %>%
+  group_by(hair_loss_desc, hormonal_change) %>%
+  summarize(total = n()) %>%
+  mutate(prop = round(total / sum(total) * 100,2)) %>%
+  ggplot(aes(fct_reorder(hormonal_change, total, .desc = TRUE), total, fill = hair_loss_desc)) +
+  geom_col(position = "dodge", alpha = .8) +
+  theme_light() +
+  scale_fill_manual(values = c("purple4","steelblue2")) +
+  geom_text(aes(label = str_c(as.character(prop), "%"), y = total + 2), position = position_dodge(0.9), size = 4) +
+  theme(axis.text.x = element_text(angle = 45, size = 9)) +
+  labs(title = "Hormonal Change Summary by Hormonal Change",
+       x = "Hormonal Change",
+       y = "Total") +
+  guides(fill=guide_legend(title="Hair Loss"))
+
+df_f %>%
+  group_by(hair_loss_desc, medical_treatments) %>%
+  summarize(total = n()) %>%
+  mutate(prop = round(total / sum(total) * 100,2)) %>%
+  ggplot(aes(fct_reorder(medical_treatments, total, .desc = TRUE), total, fill = hair_loss_desc)) +
+  geom_col(position = "dodge", alpha = .8) +
+  theme_light() +
+  scale_fill_manual(values = c("purple4","steelblue2")) +
+  theme(axis.text.x = element_text(angle = 45, size = 7)) +
+  labs(title = "Medical Treatments Summary by Medical Treatment",
+       x = "Medical Treatment",
+       y = "Total") +
+  guides(fill=guide_legend(title="Hair Loss"))
+
+df_f %>%
+  group_by(hair_loss_desc, medical_conditions) %>%
+  summarize(total = n()) %>%
+  mutate(prop = round(total / sum(total) * 100,2)) %>%
+  ggplot(aes(fct_reorder(medical_conditions, total, .desc = TRUE), total, fill = hair_loss_desc)) +
+  geom_col(position = "dodge", alpha = .8) +
+  theme_light() +
+  scale_fill_manual(values = c("purple4","steelblue2")) +
+  theme(axis.text.x = element_text(angle = 45, size = 7)) +
+  labs(title = "Medical Conditions Summary by Medical Conditions",
+       x = "Medical Conditions",
+       y = "Total") +
+  guides(fill=guide_legend(title="Hair Loss"))
+
+df_f %>%
+  group_by(hair_loss_desc, nutritional_deficiencies) %>%
+  summarize(total = n()) %>%
+  mutate(prop = round(total / sum(total) * 100,2)) %>%
+  ggplot(aes(fct_reorder(nutritional_deficiencies, total, .desc = TRUE), total, fill = hair_loss_desc)) +
+  geom_col(position = "dodge", alpha = .8) +
+  theme_light() +
+  scale_fill_manual(values = c("purple4","steelblue2")) +
+  theme(axis.text.x = element_text(angle = 45, size = 7))  +
+  labs(title = "Nutritional Deficiencies Summary by Nutritional Deficiencies",
+       x = "Nutritional Deficiencies",
+       y = "Total") +
+  guides(fill=guide_legend(title="Hair Loss"))
+
+df_f %>%
+  group_by(hair_loss_desc, stress) %>%
+  summarize(total = n()) %>%
+  mutate(prop = round(total / sum(total) * 100,2)) %>%
+  ggplot(aes(fct_reorder(stress, total, .desc = TRUE), total, fill = hair_loss_desc)) +
+  geom_col(position = "dodge", alpha = .8) +
+  theme_light() +
+  scale_fill_manual(values = c("purple4","steelblue2")) +
+  geom_text(aes(label = str_c(as.character(prop), "%"), y = total + 2), position = position_dodge(0.9), size = 4) +
+  theme(axis.text.x = element_text(angle = 45, size = 9)) +
+  labs(title = "Stress Summary by Stress Level",
+       x = "Stress",
+       y = "Total") +
+  guides(fill=guide_legend(title="Hair Loss"))
+
+df_f %>%
+  group_by(hair_loss_desc, poor_hair_care_habits) %>%
+  summarize(total = n()) %>%
+  mutate(prop = round(total / sum(total) * 100,2)) %>%
+  ggplot(aes(fct_reorder(poor_hair_care_habits, total, .desc = TRUE), total, fill = hair_loss_desc)) +
+  geom_col(position = "dodge", alpha = .8) +
+  theme_light() +
+  scale_fill_manual(values = c("purple4","steelblue2")) +
+  geom_text(aes(label = str_c(as.character(prop), "%"), y = total + 2), position = position_dodge(0.9), size = 4) +
+  theme(axis.text.x = element_text(angle = 45, size = 9)) +
+  labs(title = "Poor Hair Care Habits Summary by Poor Hair Care Habits",
+       x = "Poor Hair Care Habits",
+       y = "Total") +
+  guides(fill=guide_legend(title="Hair Loss"))
+
+df_f %>%
+  group_by(hair_loss_desc, environmental_factors) %>%
+  summarize(total = n()) %>%
+  mutate(prop = round(total / sum(total) * 100,2)) %>%
+  ggplot(aes(fct_reorder(environmental_factors, total, .desc = TRUE), total, fill = hair_loss_desc)) +
+  geom_col(position = "dodge", alpha = .8) +
+  theme_light() +
+  scale_fill_manual(values = c("purple4","steelblue2")) +
+  geom_text(aes(label = str_c(as.character(prop), "%"), y = total + 2), position = position_dodge(0.9), size = 4) +
+  theme(axis.text.x = element_text(angle = 45, size = 9)) +
+  labs(title = "Environmental Factors Summary by Environmental Factors",
+       x = "Environmental Factors",
+       y = "Total") +
+  guides(fill=guide_legend(title="Hair Loss"))
+
+df_f %>%
+  group_by(hair_loss_desc, smoking) %>%
+  summarize(total = n()) %>%
+  mutate(prop = round(total / sum(total) * 100,2)) %>%
+  ggplot(aes(fct_reorder(smoking, total, .desc = TRUE), total, fill = hair_loss_desc)) +
+  geom_col(position = "dodge", alpha = .8) +
+  theme_light() +
+  scale_fill_manual(values = c("purple4","steelblue2")) +
+  geom_text(aes(label = str_c(as.character(prop), "%"), y = total + 2), position = position_dodge(0.9), size = 4) +
+  theme(axis.text.x = element_text(angle = 45, size = 9)) +
+  labs(title = "Smoking Summary by Smoking",
+       x = "Smoking Summary",
+       y = "Total") +
+  guides(fill=guide_legend(title="Hair Loss"))
+
+df_f %>%
+  group_by(hair_loss_desc, weight_loss) %>%
+  summarize(total = n()) %>%
+  mutate(prop = round(total / sum(total) * 100,2)) %>%
+  ggplot(aes(fct_reorder(weight_loss, total, .desc = TRUE), total, fill = hair_loss_desc)) +
+  geom_col(position = "dodge", alpha = .8) +
+  theme_light() +
+  scale_fill_manual(values = c("purple4","steelblue2")) +
+  geom_text(aes(label = str_c(as.character(prop), "%"), y = total + 2), position = position_dodge(0.9), size = 4) +
+  theme(axis.text.x = element_text(angle = 45, size = 9)) +
+  labs(title = "Weight Loss Summary by Weight Loss",
+       x = "Weight Loss Summary",
+       y = "Total") +
+  guides(fill=guide_legend(title="Hair Loss"))
+```
+
+### Preliminary Results
+
+This plots shows us some important information:
+
+-> Besides the age groups created in the data, I also presented a density plot, for a smaller granularity analysis, it shows us that people under 22 and from 27 to 39 years are the ones most affected by Hair Loss;
+
+-> Genetics plays a role in some individuals regarding Hair Loss;
+
+-> Hormonal Change influentiates differently only a small percentage of individuals;
+
+-> Steroids, Antibiotics and Rogaine are the most relevant Medical Treatments;
+
+-> Alopecia Areata, Androgenetic Alopecia and Seborrheic Dermatitis are the biggest issue when talking on Medical conditions;
+
+-> Half of the Nutritional Deficiencies are related in some degree to Hair Loss. The bigger factors are Magnesium and Protein Deficiency;
+
+-> Moderate Stress also contributes to Hair Loss more them other levels;
+
+-> Interestingly people who declares NOT having Poor Hair Care Habits are the most affected;
+
+-> People NOT exposed to Environmental Factors also suffer more from Hair Loss;
+
+-> Non Smokers are in the group more affected;
+
+-> People Loosing Weight as well are being hit from Hair Loss.
+
+Here we can identify a lot of variables that affects, individually, the Hair Loss problem. But this is not enough, as we are pursuing identify groups with commom factors that lead to Baldness. Maybe we are looking for some isolated symptons or causes that are not working together, let's clarify it.
+
+So, as a first glance this is, we still need to move on and find some patterns. And here lies the challenge.
+
+
+## How could we find those Patterns?
+
+Clustering
+
+I applied a clustering algorithm on the data available, to find underlying patterns in the data, a task that gets hard for humans to do when you have a lot of variables with many observations and a lot of possible combinations among them. An algorithm can detect even more nuances them a human could do, creating some great insights. The processes used here is in the realm of the Unsupervised Learning, where we let the algorithm decides how to group the data. We just give it directions.
+
+A little more techinical:
+
+Altough most of the Machine Learning algorithms for this job are prepared to process datasets with numbers, we have also some options to work with categorical variables. The Hierarchical Clustering is one that can handle this job. The main differente is how prepare the data for this. We need to create our dissimilarity matrix using Gower's method, so we tranform our categorical variables in distances, everything our algorithm needs to perform.
+
+I tried different approaches and decided for Divisive Clustering and, based on Elbow and Silhuette analysis, I was able to create 6 good clusters with related data. As we can see below.
+
+<br>
+```{r echo=FALSE, fig.align = 'center', message = FALSE, warning = FALSE, include = FALSE}
+# changes variable names for something more explanatory, for future visualization in the heatmap
+
+df_f$hair_loss_desc <- ifelse(df_f$hair_loss == 0,
+                              "Hair Loss - No",
+                              "Hair Loss - Yes")
+
+df_f$genetics <- ifelse(df_f$genetics == "Yes",
+                        "Gen - Yes",
+                        "Gen - No")
+
+df_f$hormonal_change <- ifelse(df_f$hormonal_change == "Yes",
+                               "Horm. Change - Yes",
+                               "Horm. Change - No")
+
+df_f$poor_hair_care_habits <- ifelse(df_f$poor_hair_care_habits == "Yes",
+                                     "Poor Hair Hab. - Yes",
+                                     "Poor Hair Hab. - No")
+
+df_f$environmental_factors <- ifelse(df_f$environmental_factors == "Yes",
+                                     "Environm. Factors - Yes",
+                                     "Environm. Factors - No")
+
+df_f$smoking <- ifelse(df_f$smoking == "Yes",
+                       "Smoking - Yes",
+                       "Smoking - No")
+
+df_f$weight_loss <- ifelse(df_f$weight_loss == "Yes",
+                           "Weight Loss - Yes",
+                           "Weight Loss - No")
+
+df_f$stress <- case_when(df_f$stress == "Low" ~ "Stress Low",
+                         df_f$stress == "Moderate" ~ "Stress Moderate",
+                         df_f$stress == "High" ~ "Stress High")
+
+
+df_f_m <- df_f %>%
+  dplyr::select(-c(hair_loss, age))
+
+
+df_f_m$genetics <- as.factor(df_f_m$genetics)
+df_f_m$hormonal_change <- as.factor(df_f_m$hormonal_change)
+df_f_m$medical_conditions <- as.factor(df_f_m$medical_conditions)
+df_f_m$medical_treatments <- as.factor(df_f_m$medical_treatments)
+df_f_m$nutritional_deficiencies <- as.factor(df_f_m$nutritional_deficiencies)
+df_f_m$stress <- as.factor(df_f_m$stress)
+df_f_m$poor_hair_care_habits <- as.factor(df_f_m$poor_hair_care_habits)
+df_f_m$environmental_factors <- as.factor(df_f_m$environmental_factors)
+df_f_m$smoking <- as.factor(df_f_m$smoking)
+df_f_m$weight_loss <- as.factor(df_f_m$weight_loss)
+df_f_m$age_group <- as.factor(df_f_m$age_group)
+df_f_m$hair_loss_desc <- as.factor(df_f_m$hair_loss_desc)
+
+
+gower.dist <- daisy(df_f_m, metric = c("gower"), wei)
+
+
+
+# First I'll transform this data using GOWER, to create a dissimilarity matrix
+# from the categorical data provided, this will be the input in our clustering algorithm
+
+gower.dist <- daisy(df_f_m, metric = c("gower"), wei)
+
+# I'll perform two clustering methods, both using Hierarchical Clustering: Divisive and Agglomerative.
+
+# Divisive
+divisive.clust <- diana(as.matrix(gower.dist), 
+                        diss = TRUE, keep.diss = TRUE)
+plot(divisive.clust, main = "Divisive Clustering")
+
+# Agglomerative
+aggl.clust.c <- hclust(gower.dist, method = "complete")
+plot(aggl.clust.c,
+     main = "Agglomerative Clustering, complete linkages")
+aggl.clust.c <- hclust(gower.dist, method = "complete")
+
+
+# Generating and grouping some statistics seeking orientation and good format to analyse
+
+cstats.table <- function(dist, tree, k) {
+  clust.assess <- c("cluster.number",
+                    "n",
+                    "within.cluster.ss",
+                    "average.within",
+                    "average.between",
+                    "wb.ratio",
+                    "dunn2",
+                    "avg.silwidth")
+  clust.size <- c("cluster.size")
+  stats.names <- c()
+  row.clust <- c()
+  output.stats <- matrix(ncol = k, nrow = length(clust.assess))
+  cluster.sizes <- matrix(ncol = k, nrow = k)
+  for(i in c(1:k)){
+    row.clust[i] <- paste("Cluster-", i, " size")
+  }
+  for(i in c(2:k)){
+    stats.names[i] <- paste("Test", i-1)
+    
+    for(j in seq_along(clust.assess)){
+      output.stats[j, i] <- unlist(cluster.stats(d = dist, clustering = cutree(tree, k = i))[clust.assess])[j]
+      
+    }
+    
+    for(d in 1:k) {
+      cluster.sizes[d, i] <- unlist(cluster.stats(d = dist, clustering = cutree(tree, k = i))[clust.size])[d]
+      dim(cluster.sizes[d, i]) <- c(length(cluster.sizes[i]), 1)
+      cluster.sizes[d, i]
+      
+    }
+  }
+  output.stats.df <- data.frame(output.stats)
+  cluster.sizes <- data.frame(cluster.sizes)
+  cluster.sizes[is.na(cluster.sizes)] <- 0
+  rows.all <- c(clust.assess, row.clust)
+  rownames(output.stats.df) <- clust.assess
+  output <- rbind(output.stats.df, cluster.sizes)[ ,-1]
+  colnames(output) <- stats.names[2:k]
+  rownames(output) <- rows.all
+  is.num <- sapply(output, is.numeric)
+  output[is.num] <- lapply(output[is.num], round, 2)
+  output
+}
+# I am limiting the maximum amout of clusters by 10
+# Looking at the Dendogram I already have a final number of clusters in mind: 6 - let's seek for confirmation.
+stats.df.divisive <- cstats.table(gower.dist, divisive.clust, 10)
+stats.df.divisive
+
+```
+<br>
+```{r echo=FALSE, fig.align = 'center', message = FALSE, warning = FALSE}
+# Looking at the dendrograms and Statistics, as mentioned above, I am already 
+# leaning towards the Divisive aprouch, as it looks mode natural and according to the data. 
+
+#But, let's follow a little further, with the Elbow and Silhouette plots for next steps. 
+
+# Elbow - Divisive clustering
+ggplot(data = data.frame(t(cstats.table(gower.dist, divisive.clust, 15))), 
+       aes(x=cluster.number, y=within.cluster.ss)) + 
+  geom_point() +
+  geom_line() +
+  theme_light() +
+  labs(title = "Elbows: Divisive clustering",
+       x = "Number of clusters",
+       y = "Within Clusters Sum of Squares") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Silhouette - Divisive
+ggplot(data = data.frame(t(cstats.table(gower.dist, divisive.clust, 15))), 
+       aes(x=cluster.number, y=avg.silwidth)) + 
+  geom_point() +
+  geom_line() +
+  theme_light() +
+  labs(title = "Silhouette: Divisive clustering",
+       x = "Number of clusters",
+       y = "Average silhouette width") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+# So, both the Elbow Plot and the Silhouette Plot tells me that 6 is a good number
+# for clusters. But I will try also 5 or for, to see if it tells more about the data. 
+```
+<br>
+```{r echo=FALSE, fig.align = 'center', message = FALSE, warning = FALSE}
+# And finally, to make things visual a Heatmap to see were things fit. 
+clust.num <- cutree(aggl.clust.c, k = 6)
+df_f_m_cl <- cbind(df_f_m, clust.num)
+cust.long <- melt(data.frame(lapply(df_f_m_cl, as.character), stringsAsFactors=FALSE), 
+                  id = c("id", "clust.num"), factorsAsStrings=T)
+cust.long.q <- cust.long %>%
+  group_by(clust.num, variable, value) %>%
+  mutate(count = n_distinct(id)) %>%
+  distinct(clust.num, variable, value, count)
+
+
+# heatmap.c will be suitable in case you want to go for absolute counts - but it doesn't tell much to my taste
+
+heatmap.c <- ggplot(cust.long.q, aes(x = clust.num, y = factor(value,
+                                                               levels = c("<= 25 years",
+                                                                          "> 45 years",
+                                                                          "25 - 35 years",
+                                                                          "35 - 45 years",
+                                                                          "Alopecia Areata",
+                                                                          "Androgenetic Alopecia",
+                                                                          "Dermatitis",
+                                                                          "Dermatosis",
+                                                                          "Eczema",
+                                                                          "Psoriasis",
+                                                                          "Thyroid Problems",
+                                                                          "Ringworm",
+                                                                          "Scalp Infection", 
+                                                                          "Seborrheic Dermatitis", 
+                                                                          "Rogaine", 
+                                                                          "Antibiotics",
+                                                                          "Antidepressants", 
+                                                                          "Antifungal Cream", 
+                                                                          "Blood Pressure Medication",
+                                                                          "Accutane","Heart Medication", 
+                                                                          "Steroids", 
+                                                                          "Immunomodulators",
+                                                                          "Chemotherapy", 
+                                                                          "Environm. Factors - No", 
+                                                                          "Environm. Factors - Yes",
+                                                                          "Gen - No", 
+                                                                          "Gen - Yes", 
+                                                                          "Hair Loss - No", 
+                                                                          "Hair Loss - Yes", 
+                                                                          "Horm. Change - No", 
+                                                                          "Horm. Change - Yes", 
+                                                                          "Iron deficiency", 
+                                                                          "Magnesium deficiency", 
+                                                                          "Omega-3 fatty acids", 
+                                                                          "Vitamin D Deficiency",
+                                                                          "Vitamin E deficiency", 
+                                                                          "Zinc Deficiency", 
+                                                                          "Protein deficiency", 
+                                                                          "Selenium deficiency", 
+                                                                          "Biotin Deficiency", 
+                                                                          "Vitamin A Deficiency", 
+                                                                          "Poor Hair Hab. - No", 
+                                                                          "Poor Hair Hab. - Yes", 
+                                                                          "Smoking - No", 
+                                                                          "Smoking - Yes", 
+                                                                          "Stress High", 
+                                                                          "Stress Moderate",
+                                                                          "Stress Low", 
+                                                                          "Weight Loss - No", 
+                                                                          "Weight Loss - Yes", 
+                                                                          "No Data"), ordered = T))) +
+  geom_tile(aes(fill = count))+
+  scale_fill_gradient2(low = "yellow2", mid = "darkorange", high = "purple4")
+
+
+# calculating the percent of each factor level in the absolute count of cluster members
+cust.long.p <- cust.long.q %>%
+  group_by(clust.num, variable) %>%
+  mutate(perc = count / sum(count)) %>%
+  arrange(clust.num)
+heatmap.p <- ggplot(cust.long.p, aes(x = clust.num, y = factor(value, 
+                                                               levels = c("<= 25 years",
+                                                                          "> 45 years",
+                                                                          "25 - 35 years",
+                                                                          "35 - 45 years",
+                                                                          "Alopecia Areata",
+                                                                          "Androgenetic Alopecia",
+                                                                          "Dermatitis",
+                                                                          "Dermatosis",
+                                                                          "Eczema",
+                                                                          "Psoriasis",
+                                                                          "Thyroid Problems",
+                                                                          "Ringworm",
+                                                                          "Scalp Infection", 
+                                                                          "Seborrheic Dermatitis", 
+                                                                          "Rogaine", 
+                                                                          "Antibiotics",
+                                                                          "Antidepressants", 
+                                                                          "Antifungal Cream", 
+                                                                          "Blood Pressure Medication",
+                                                                          "Accutane","Heart Medication", 
+                                                                          "Steroids", 
+                                                                          "Immunomodulators",
+                                                                          "Chemotherapy", 
+                                                                          "Environm. Factors - No", 
+                                                                          "Environm. Factors - Yes",
+                                                                          "Gen - No", 
+                                                                          "Gen - Yes", 
+                                                                          "Hair Loss - No", 
+                                                                          "Hair Loss - Yes", 
+                                                                          "Horm. Change - No", 
+                                                                          "Horm. Change - Yes", 
+                                                                          "Iron deficiency", 
+                                                                          "Magnesium deficiency", 
+                                                                          "Omega-3 fatty acids", 
+                                                                          "Vitamin D Deficiency",
+                                                                          "Vitamin E deficiency", 
+                                                                          "Zinc Deficiency", 
+                                                                          "Protein deficiency", 
+                                                                          "Selenium deficiency", 
+                                                                          "Biotin Deficiency", 
+                                                                          "Vitamin A Deficiency", 
+                                                                          "Poor Hair Hab. - No", 
+                                                                          "Poor Hair Hab. - Yes", 
+                                                                          "Smoking - No", 
+                                                                          "Smoking - Yes", 
+                                                                          "Stress High", 
+                                                                          "Stress Moderate",
+                                                                          "Stress Low", 
+                                                                          "Weight Loss - No", 
+                                                                          "Weight Loss - Yes", 
+                                                                          "No Data"), ordered = T))) +
+  
+  geom_tile(aes(fill = perc), alpha = 0.85)+
+  labs(title = "Distribution of characteristics across clusters", x = "Cluster number", y = NULL) +
+  geom_hline(yintercept = 4.5) + 
+  geom_hline(yintercept = 13.5) + 
+  geom_hline(yintercept = 21.5) + 
+  geom_hline(yintercept = 23.5) + 
+  geom_hline(yintercept = 25.5) +
+  geom_hline(yintercept = 27.5) +
+  geom_hline(yintercept = 29.5) +
+  geom_hline(yintercept = 38.5) +
+  geom_hline(yintercept = 40.5) + 
+  geom_hline(yintercept = 42.5) +
+  geom_hline(yintercept = 45.5) +
+  geom_hline(yintercept = 47.5) +
+  scale_fill_gradient2(low = "yellow2", mid = "darkorange", high = "purple4")
+heatmap.p
+```
+<br>
+
+##  Interpreting the Clusters
+
+Here we finally have all the data in a HeatMap for easy identification. The stronger the color, stronger the percentage of representativity of that variable (y axis) in that cluster (x axis).
+
+Also, the black horizontal lines in the HeatMap are there to show all the values inside each variable. So we can find where all the Medical Conditions ou Stress Levels are located easily.
+
+We can look here the clusters 4 and 2 that were used to extract the key insights presented.
+
+Alternatively we can explore a little more and try to identify all the characteristis of the cluster 5 - the people not suffering from hair loss, they really differ from the groups we analysed before?
+
+
+## Final considerations
+
+As we have a lot of variables with an huge amount of combinations on the observations, is worth note that we would like to have more data for this analysis, to better represent all possible combinations. This is already very helpfull and points us in some important directions. I would take from here and collect new data, maybe focusing in all groups where we could identify having more people suffering from Hair Loss. As well as taking care for not having so many data points with "NO DATA" on them.
+
